@@ -27,7 +27,7 @@ To get more insights you can read my blog post [An alternative approach to the A
 
 ## Running the sample
 
-To run the sample, open the solution in Visual Studio and start the `Net6Startup` or `Net7WebApplicationBuilder` project.
+To run the sample, open the solution in Visual Studio and start the `Net7WebApplicationBuilder` project.
 It reuses an existing SPA dev server if the client app is already running (started manually in a terminal or VS Code) or it starts a new one.
 
 The client apps are Angular applications that use the Vite based Angular dev server (`ng serve` with the esbuild `application` builder).

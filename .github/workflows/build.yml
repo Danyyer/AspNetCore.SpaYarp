@@ -28,7 +28,6 @@ jobs:
     strategy:
       matrix:
         app:
-          - samples/Net6Startup/ClientApp
           - samples/Net7WebApplicationBuilder/ClientApp
           - samples/AspNetMultipleSpaYarp/ClientAppOne
           - samples/AspNetMultipleSpaYarp/ClientAppTwo
