@@ -25,9 +25,6 @@
 		<None Include="$(SpaRootTwo)**" Exclude="$(SpaRootTwo)node_modules\**" />
 	</ItemGroup>
 
-	<!--<ItemGroup>
-    <PackageReference Include="AspNetCore.SpaYarp" Version="1.1.0" />
-  </ItemGroup>-->
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AspNetCore.SpaYarp\AspNetCore.SpaYarp.csproj" />

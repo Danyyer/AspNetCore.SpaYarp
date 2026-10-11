@@ -365,12 +365,6 @@ rm {scriptPath};
         }
     }
 
-    public Task StopAsync(CancellationToken cancellationToken)
-    {
-        Dispose(true);
-        return Task.CompletedTask;
-    }
-
     protected virtual void Dispose(bool disposing)
     {
         if (!_disposedValue)
