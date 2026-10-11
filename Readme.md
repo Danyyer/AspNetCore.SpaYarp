@@ -30,6 +30,10 @@ To get more insights you can read my blog post [An alternative approach to the A
 To run the sample, open the solution in Visual Studio and start the `Net6Startup` or `Net7WebApplicationBuilder` project.
 It reuses an existing SPA dev server if the client app is already running (started manually in a terminal or VS Code) or it starts a new one.
 
+The client apps are Angular applications that use the Vite based Angular dev server (`ng serve` with the esbuild `application` builder).
+They require Node.js `^22.22.3`, `^24.15.0` or newer and the ASP.NET Core development certificate (`dotnet dev-certs https`).
+The `AspNetMultipleSpasYarp` sample shows how to host two SPAs under different paths (`/one` and `/two`) in one host.
+
 ## Running the tests
 
 The integration tests in `tests/` host the package in-process and run it against a small fake SPA dev server (`tests/AspNetCore.SpaYarp.FakeSpa`). They need only the .NET SDK, no Node.js.
