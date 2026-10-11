@@ -5,7 +5,8 @@ _Supported ASP.NET Core versions:_
 | AspNetCore.SpaYarp version | .NET Version     |
 |----------------------------|------------------|
 | 1.1.0                      | 3.1, 5.0 and 6.0 |
-| 2.0.0                     | 6.0 and 7.0      |
+| 2.0.0                      | 6.0 and 7.0      |
+| 3.0.0 (this fork)          | 8.0, 9.0 and 10.0 |
 
 With  [ASP.NET Core Preview 4](https://devblogs.microsoft.com/aspnet/asp-net-core-updates-in-net-6-preview-4/#improved-single-page-app-spa-templates), the ASP.NET Core team introduced a [new experience for SPA templates](https://github.com/dotnet/aspnetcore/issues/27887).
 
