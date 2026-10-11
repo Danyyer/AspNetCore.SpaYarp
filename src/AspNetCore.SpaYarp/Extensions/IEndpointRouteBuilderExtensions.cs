@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Net;
 using Microsoft.AspNetCore.Authorization;
@@ -56,14 +57,27 @@ public static class IEndpointRouteBuilderExtensions
         var transformer = new CustomTransformer();
         var requestOptions = new ForwarderRequestConfig { ActivityTimeout = TimeSpan.FromSeconds(100) };
 
-        var point = endpoints.Map(string.Format("{0}/{{**catch-all}}", publicPath), async httpContext =>
+        var logger = endpoints.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("AspNetCore.SpaYarp.Forwarder");
+
+        // Normalize the public path so values like "dist", "/dist" and "/dist/" all result in "/dist/{**catch-all}".
+        var trimmedPublicPath = (publicPath ?? string.Empty).Trim('/');
+        var pattern = trimmedPublicPath.Length == 0 ? "/{**catch-all}" : $"/{trimmedPublicPath}/{{**catch-all}}";
+
+        var point = endpoints.Map(pattern, async httpContext =>
         {
             var error = await forwarder.SendAsync(httpContext, clientUrl, httpClient, requestOptions, transformer);
-            // Check if the proxy operation was successful
+            // Check if the proxy operation was successful. YARP already sets the response status code.
             if (error != ForwarderError.None)
             {
-                var errorFeature = httpContext.Features.Get<IForwarderErrorFeature>();
-                var exception = errorFeature?.Exception;
+                var exception = httpContext.Features.Get<IForwarderErrorFeature>()?.Exception;
+                if (error is ForwarderError.RequestCanceled or ForwarderError.RequestBodyCanceled or ForwarderError.ResponseBodyCanceled)
+                {
+                    logger.LogDebug(exception, "Forwarding to the SPA dev server was canceled ({Error}).", error);
+                }
+                else
+                {
+                    logger.LogWarning(exception, "Forwarding the request to the SPA dev server at '{ClientUrl}' failed ({Error}).", clientUrl, error);
+                }
             }
         });
         if (policyName is not null)

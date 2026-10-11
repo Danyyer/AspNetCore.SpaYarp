@@ -12,11 +12,17 @@ public class SpaProxyLaunchManager : IDisposable
 {
     private readonly SpaDevelopmentServerOptions _options;
     private readonly ILogger<SpaProxyLaunchManager> _logger;
+    private static readonly TimeSpan ProbeCacheDuration = TimeSpan.FromSeconds(2);
+    private static readonly HttpClient SharedHttpClient = CreateHttpClient();
+
     private readonly object _lock = new object();
 
     private Process? _spaProcess;
     private bool _disposedValue;
     private Task? _launchTask;
+    private Task<bool>? _probeTask;
+    private bool? _lastProbeResult;
+    private long _lastProbeTimestamp;
 
     public SpaProxyLaunchManager(
         ILogger<SpaProxyLaunchManager> logger,
@@ -38,9 +44,9 @@ public class SpaProxyLaunchManager : IDisposable
         // We do this to ensure Visual Studio can work correctly with IIS and when running without debugging.
         lock (_lock)
         {
-            if (_launchTask == null)
+            if (_launchTask == null && !_disposedValue)
             {
-                _logger.LogInformation($"No SPA development server running at {_options.ClientUrl} found.");
+                _logger.LogInformation("No SPA development server running at {ClientUrl} found.", _options.ClientUrl);
                 _launchTask = UpdateStatus(StartSpaProcessAndProbeForLiveness(cancellationToken));
             }
         }
@@ -50,6 +56,11 @@ public class SpaProxyLaunchManager : IDisposable
             try
             {
                 await launchTask;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // The application is shutting down.
+                _logger.LogDebug("Launching the SPA client was canceled.");
             }
             catch (Exception ex)
             {
@@ -65,60 +76,70 @@ public class SpaProxyLaunchManager : IDisposable
         }
     }
 
-    public async Task<bool> IsSpaClientRunning(CancellationToken cancellationToken)
+    public Task<bool> IsSpaClientRunning(CancellationToken cancellationToken)
     {
         // Assume running if url or launch command empty
         if (string.IsNullOrEmpty(_options.ClientUrl) || string.IsNullOrEmpty(_options.LaunchCommand))
         {
-            return true;
+            return Task.FromResult(true);
         }
 
-        var httpClient = CreateHttpClient();
+        Task<bool> probe;
+        lock (_lock)
+        {
+            // Reuse a recent result and share a single in-flight probe between concurrent requests.
+            if (_lastProbeResult is { } cached && Stopwatch.GetElapsedTime(_lastProbeTimestamp) < ProbeCacheDuration)
+            {
+                return Task.FromResult(cached);
+            }
 
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        using var cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, cancellationToken);
-        try
+            probe = _probeTask ??= ProbeAndCacheAsync();
+        }
+
+        // The shared probe has its own timeout, so a canceled request must not cancel it for the others.
+        return probe.WaitAsync(cancellationToken);
+
+        async Task<bool> ProbeAndCacheAsync()
+        {
+            // Make sure the task is assigned to _probeTask before the finally block below can run.
+            await Task.Yield();
+            try
+            {
+                return await ProbeSpaDevelopmentServerUrl(CancellationToken.None);
+            }
+            finally
+            {
+                lock (_lock)
+                {
+                    _probeTask = null;
+                }
+            }
+        }
+    }
+
+    private string ProbeUrl
+    {
+        get
         {
             var url = _options.ClientUrl;
             if (!string.IsNullOrEmpty(_options.PublicPath))
             {
-                var uri = new Uri(new Uri(url), _options.PublicPath);
-                url = uri.ToString();
+                url = new Uri(new Uri(url), _options.PublicPath).ToString();
             }
-            var response = await httpClient.GetAsync(url, cancellationTokenSource.Token);
-            var running = response.IsSuccessStatusCode;
-            return running;
-        }
-        catch (Exception exception) when (exception is HttpRequestException ||
-              exception is TaskCanceledException ||
-              exception is OperationCanceledException)
-        {
-            _logger.LogDebug(exception, "Failed to connect to the SPA Development proxy.");
-            return false;
+
+            return url;
         }
     }
 
-    private static HttpClient CreateHttpClient()
-    {
-        var httpClient = new HttpClient(new HttpClientHandler()
-        {
-            UseProxy = false,
-            // It's ok for us to do this here since this service is only plugged in during development.
-            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-        });
-        // We don't care about the returned content type as long as the server is able to answer with 2XX
-        httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("*/*", 0.1));
-        return httpClient;
-    }
-
-    private async Task<bool> ProbeSpaDevelopmentServerUrl(HttpClient httpClient, CancellationToken cancellationToken)
+    private async Task<bool> ProbeSpaDevelopmentServerUrl(CancellationToken cancellationToken)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         using var cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, cancellationToken);
+        var running = false;
         try
         {
-            var response = await httpClient.GetAsync(_options.ClientUrl, cancellationTokenSource.Token);
-            var running = response.IsSuccessStatusCode;
+            using var response = await SharedHttpClient.GetAsync(ProbeUrl, HttpCompletionOption.ResponseHeadersRead, cancellationTokenSource.Token);
+            running = response.IsSuccessStatusCode;
             return running;
         }
         catch (Exception exception) when (exception is HttpRequestException ||
@@ -127,19 +148,40 @@ public class SpaProxyLaunchManager : IDisposable
         {
             _logger.LogDebug(exception, "Failed to connect to the SPA Development proxy.");
             return false;
+        }
+        finally
+        {
+            lock (_lock)
+            {
+                if (_lastProbeResult != running)
+                {
+                    _logger.LogInformation(running ? "SPA client is ready." : "SPA client is not reachable.");
+                }
+
+                _lastProbeResult = running;
+                _lastProbeTimestamp = Stopwatch.GetTimestamp();
+            }
         }
     }
 
     private async Task StartSpaProcessAndProbeForLiveness(CancellationToken cancellationToken)
     {
-        LaunchDevelopmentClient();
+        // Don't start a second process if one that we launched earlier is still alive (e.g. it is slow to start).
+        if (_spaProcess is { HasExited: false })
+        {
+            _logger.LogInformation("The SPA development server process is already running. Waiting for it to respond.");
+        }
+        else
+        {
+            LaunchDevelopmentClient();
+        }
+
         var sw = Stopwatch.StartNew();
         var livenessProbeSucceeded = false;
         var maxTimeoutReached = false;
-        var httpClient = CreateHttpClient();
         while (_spaProcess != null && !_spaProcess.HasExited && !maxTimeoutReached)
         {
-            livenessProbeSucceeded = await ProbeSpaDevelopmentServerUrl(httpClient, cancellationToken);
+            livenessProbeSucceeded = await ProbeSpaDevelopmentServerUrl(cancellationToken);
             if (livenessProbeSucceeded)
             {
                 break;
@@ -156,16 +198,29 @@ public class SpaProxyLaunchManager : IDisposable
 
         if (_spaProcess == null || _spaProcess.HasExited)
         {
-            _logger.LogError($"Couldn't start the SPA development server with command '{_options.LaunchCommand}'.");
+            _logger.LogError("Couldn't start the SPA development server with command '{LaunchCommand}'.", _options.LaunchCommand);
         }
         else if (!livenessProbeSucceeded)
         {
-            _logger.LogError($"Unable to connect to the SPA development server at '{_options.ClientUrl}'.");
+            _logger.LogError("Unable to connect to the SPA development server at '{ClientUrl}'.", _options.ClientUrl);
         }
         else
         {
-            _logger.LogInformation($"SPA development server running at '{_options.ClientUrl}'");
+            _logger.LogInformation("SPA development server running at '{ClientUrl}'", _options.ClientUrl);
         }
+    }
+
+    private static HttpClient CreateHttpClient()
+    {
+        var httpClient = new HttpClient(new HttpClientHandler()
+        {
+            UseProxy = false,
+            // It's ok for us to do this here since this service is only plugged in during development.
+            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+        });
+        // We don't care about the returned content type as long as the server is able to answer with 2XX
+        httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("*/*", 0.1));
+        return httpClient;
     }
 
     private void LaunchDevelopmentClient()
@@ -174,14 +229,11 @@ public class SpaProxyLaunchManager : IDisposable
         {
             // Launch command is going to be something like `npm/yarn <<verb>> <<options>>`
             // We split it into two to separate the tool (command) from the verb and the rest of the arguments.
-            var space = _options.LaunchCommand.IndexOf(' ');
-            var command = _options.LaunchCommand[0..space];
-            var arguments = _options.LaunchCommand[++space..];
-#if NETCOREAPP3_1
-            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) && !Path.HasExtension(command))
-#else
+            var launchCommand = _options.LaunchCommand.Trim();
+            var space = launchCommand.IndexOf(' ');
+            var command = space < 0 ? launchCommand : launchCommand[..space];
+            var arguments = space < 0 ? string.Empty : launchCommand[(space + 1)..];
             if (OperatingSystem.IsWindows() && !Path.HasExtension(command))
-#endif
             {
                 // On windows we transform npm/yarn to npm.cmd/yarn.cmd so that the command
                 // can actually be found when we start the process. This is overridable if
@@ -205,19 +257,11 @@ public class SpaProxyLaunchManager : IDisposable
             _spaProcess = Process.Start(info);
             if (_spaProcess != null && !_spaProcess.HasExited)
             {
-#if NETCOREAPP3_1
-                if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
-#else
                 if (OperatingSystem.IsWindows())
-#endif
                 {
                     LaunchStopScriptWindows(_spaProcess.Id);
                 }
-#if NETCOREAPP3_1
-                else if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX))
-#else
                 else if (OperatingSystem.IsMacOS())
-#endif
                 {
                     LaunchStopScriptMacOS(_spaProcess.Id);
                 }
@@ -225,17 +269,13 @@ public class SpaProxyLaunchManager : IDisposable
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, $"Failed to launch the SPA development server '{_options.LaunchCommand}'.");
+            _logger.LogError(exception, "Failed to launch the SPA development server '{LaunchCommand}'.", _options.LaunchCommand);
         }
     }
 
     private void LaunchStopScriptWindows(int spaProcessId)
     {
-#if NETCOREAPP3_1
-        var processId = Process.GetCurrentProcess().Id;
-#else
         var processId = Environment.ProcessId;
-#endif
         var stopScript = $@"do{{
   try
   {{
@@ -276,11 +316,7 @@ catch
 
     private void LaunchStopScriptMacOS(int spaProcessId)
     {
-#if NETCOREAPP3_1
-        var processId = Process.GetCurrentProcess().Id;
-#else
         var processId = Environment.ProcessId;
-#endif
         var fileName = Guid.NewGuid().ToString("N") + ".sh";
         var scriptPath = Path.Combine(AppContext.BaseDirectory, fileName);
         var stopScript = @$"function list_child_processes(){{
@@ -329,12 +365,6 @@ rm {scriptPath};
         }
     }
 
-    public Task StopAsync(CancellationToken cancellationToken)
-    {
-        Dispose(true);
-        return Task.CompletedTask;
-    }
-
     protected virtual void Dispose(bool disposing)
     {
         if (!_disposedValue)
@@ -377,11 +407,6 @@ rm {scriptPath};
 
             _disposedValue = true;
         }
-    }
-
-    ~SpaProxyLaunchManager()
-    {
-        Dispose(disposing: false);
     }
 
     void IDisposable.Dispose()

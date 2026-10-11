@@ -1,0 +1,46 @@
+name: Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+      - name: Restore
+        run: dotnet restore AspNetCore.SpaYarp.sln
+      - name: Build
+        run: dotnet build AspNetCore.SpaYarp.sln --configuration Release --no-restore
+      - name: Test
+        run: dotnet test AspNetCore.SpaYarp.sln --configuration Release --no-build
+
+  samples-client:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app:
+          - samples/Net7WebApplicationBuilder/ClientApp
+          - samples/AspNetMultipleSpaYarp/ClientAppOne
+          - samples/AspNetMultipleSpaYarp/ClientAppTwo
+    defaults:
+      run:
+        working-directory: ${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ${{ matrix.app }}/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm test -- --no-watch

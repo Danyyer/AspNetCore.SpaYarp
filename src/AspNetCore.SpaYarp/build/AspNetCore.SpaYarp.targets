@@ -4,16 +4,21 @@
     <PropertyGroup>
       <_SpaProxyServerLaunchConfig>$(IntermediateOutputPath)spa.proxy.json</_SpaProxyServerLaunchConfig>
       <_SpaRootFullPath>$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(SpaRoot)').Replace('\','\\'))</_SpaRootFullPath>
+      <!-- Escape backslashes and quotes so the values can be embedded as JSON strings. -->
+      <_SpaClientUrlJson>$(SpaClientUrl.Replace('\','\\').Replace('"','\"'))</_SpaClientUrlJson>
+      <_SpaLaunchCommandJson>$(SpaLaunchCommand.Replace('\','\\').Replace('"','\"'))</_SpaLaunchCommandJson>
+      <_SpaPublicPathJson>$(SpaPublicPath.Replace('\','\\').Replace('"','\"'))</_SpaPublicPathJson>
+      <_SpaRootFullPathJson>$(_SpaRootFullPath.Replace('"','\"'))</_SpaRootFullPathJson>
       <SpaProxyTimeoutInSeconds Condition="'$(SpaProxyTimeoutInSeconds)' == ''" >120</SpaProxyTimeoutInSeconds>
     </PropertyGroup>
     <ItemGroup>
       <_SpaProxyServerLaunchConfigLines Include="{" />
       <_SpaProxyServerLaunchConfigLines Include="  &quot;SpaProxyServer&quot;: {" />
-      <_SpaProxyServerLaunchConfigLines Include="    &quot;ClientUrl&quot;: &quot;$(SpaClientUrl)&quot;," />
-      <_SpaProxyServerLaunchConfigLines Include="    &quot;LaunchCommand&quot;: &quot;$(SpaLaunchCommand)&quot;," />
-      <_SpaProxyServerLaunchConfigLines Include="    &quot;WorkingDirectory&quot;: &quot;$(_SpaRootFullPath)&quot;," />
+      <_SpaProxyServerLaunchConfigLines Include="    &quot;ClientUrl&quot;: &quot;$(_SpaClientUrlJson)&quot;," />
+      <_SpaProxyServerLaunchConfigLines Include="    &quot;LaunchCommand&quot;: &quot;$(_SpaLaunchCommandJson)&quot;," />
+      <_SpaProxyServerLaunchConfigLines Include="    &quot;WorkingDirectory&quot;: &quot;$(_SpaRootFullPathJson)&quot;," />
       <_SpaProxyServerLaunchConfigLines Include="    &quot;MaxTimeoutInSeconds&quot;: &quot;$(SpaProxyTimeoutInSeconds)&quot;," />
-      <_SpaProxyServerLaunchConfigLines Include="    &quot;PublicPath&quot;: &quot;$(SpaPublicPath)&quot;" />
+      <_SpaProxyServerLaunchConfigLines Include="    &quot;PublicPath&quot;: &quot;$(_SpaPublicPathJson)&quot;" />
       <_SpaProxyServerLaunchConfigLines Include="  }" />
       <_SpaProxyServerLaunchConfigLines Include="}" />
     </ItemGroup>
