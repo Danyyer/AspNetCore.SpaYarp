@@ -30,6 +30,14 @@ To get more insights you can read my blog post [An alternative approach to the A
 To run the sample, open the solution in Visual Studio and start the `Net6Startup` or `Net7WebApplicationBuilder` project.
 It reuses an existing SPA dev server if the client app is already running (started manually in a terminal or VS Code) or it starts a new one.
 
+## Running the tests
+
+The integration tests in `tests/` host the package in-process and run it against a small fake SPA dev server (`tests/AspNetCore.SpaYarp.FakeSpa`). They need only the .NET SDK, no Node.js.
+
+```
+dotnet test AspNetCore.SpaYarp.sln
+```
+
 ## Debugging
 
 It's possible to debug the .NET code and the SPA at the same time with different editors. To use Visual Studio Code to debug the SPA, create a `launch.json` file as [described in the docs](https://code.visualstudio.com/docs/nodejs/angular-tutorial#_debugging-angular).

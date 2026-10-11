@@ -20,3 +20,5 @@ jobs:
         run: dotnet restore AspNetCore.SpaYarp.sln
       - name: Build
         run: dotnet build AspNetCore.SpaYarp.sln --configuration Release --no-restore
+      - name: Test
+        run: dotnet test AspNetCore.SpaYarp.sln --configuration Release --no-build

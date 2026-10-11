@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AspNetCore.SpaYarp\AspNetCore.SpaYarp.csproj" />
+    <!-- Only built (not referenced): the tests start the fake SPA as a separate process. -->
+    <ProjectReference Include="..\AspNetCore.SpaYarp.FakeSpa\AspNetCore.SpaYarp.FakeSpa.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Lets the tests find the fake SPA assembly. -->
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>FakeSpaDll</_Parameter1>
+      <_Parameter2>$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)', '..', 'AspNetCore.SpaYarp.FakeSpa', 'bin', '$(Configuration)', '$(TargetFramework)', 'AspNetCore.SpaYarp.FakeSpa.dll'))</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+</Project>
