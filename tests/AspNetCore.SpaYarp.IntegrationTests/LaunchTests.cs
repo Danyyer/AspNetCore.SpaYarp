@@ -70,8 +70,12 @@ public class LaunchTests : IDisposable
         await TestEnvironment.WaitUntil(async () => (await host.Navigate("/")).Body == "FAKE-SPA-INDEX", "SPA to be proxied");
         await host.Fetch("/__exit");
 
-        await TestEnvironment.WaitUntil(async () => LaunchCount == 2 && (await host.Navigate("/")).Body == "FAKE-SPA-INDEX",
-            "SPA to be launched again and proxied");
+        // Requests are what make the package notice that the SPA died, so keep navigating while waiting.
+        await TestEnvironment.WaitUntil(async () =>
+        {
+            var (_, body) = await host.Navigate("/");
+            return LaunchCount == 2 && body == "FAKE-SPA-INDEX";
+        }, "SPA to be launched again and proxied");
     }
 
     [Fact]
