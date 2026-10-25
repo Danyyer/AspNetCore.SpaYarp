@@ -6,6 +6,9 @@ It is used by an ASP.NET Core host with [AspNetCore.SpaYarp](../../../Readme.md)
 
 Requires Node.js `^22.22.3`, `^24.15.0` or newer (see `engines` in `package.json`).
 
+> `package.json` has an `overrides` entry that pins `vite` to a patched patch release (`@angular/build` pins an
+> older one with known advisories). Remove it once `@angular/build` ships a Vite version that includes the fixes.
+
 ```
 npm install
 npm start      # ng serve on https://localhost:44478/one/ (uses the ASP.NET Core dev certificate)
