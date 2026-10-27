@@ -17,8 +17,6 @@ namespace AspNetCore.SpaYarp;
 /// </summary>
 public class SpaProxyMiddleware
 {
-    private static bool _spaClientRunning = false;
-
     private readonly RequestDelegate _next;
     private readonly SpaProxyLaunchManager _spaProxyLaunchManager;
     private readonly IOptions<SpaDevelopmentServerOptions> _options;
@@ -41,20 +39,19 @@ public class SpaProxyMiddleware
 
     public async Task Invoke(HttpContext context)
     {
-        if (!_spaClientRunning && !await _spaProxyLaunchManager.IsSpaClientRunning(context.RequestAborted))
+        // Only browser navigations get the temporary landing page. Other requests (API calls, scripts, ...)
+        // must not receive HTML, so they pass through. The SPA is started when a page is requested.
+        if (IsNavigationRequest(context.Request) && !await _spaProxyLaunchManager.IsSpaClientRunning(context.RequestAborted))
         {
             _spaProxyLaunchManager.StartInBackground(_hostLifetime.ApplicationStopping);
-            _logger.LogInformation("SPA client is not ready. Returning temporary landing page.");
+            _logger.LogDebug("SPA client is not ready. Returning temporary landing page.");
             context.Response.Headers[HeaderNames.CacheControl] = "no-cache, no-store, must-revalidate, max-age=0";
-            context.Response.ContentType = "text/html";
+            context.Response.ContentType = "text/html; charset=utf-8";
 
-            await using var writer = new StreamWriter(context.Response.Body, Encoding.UTF8);
-            await writer.WriteAsync(GenerateSpaLaunchPage(_options.Value));
+            await context.Response.WriteAsync(GenerateSpaLaunchPage(_options.Value), Encoding.UTF8, context.RequestAborted);
         }
         else
         {
-            _logger.LogInformation($"SPA client is ready.");
-            _spaClientRunning = true;
             await _next(context);
         }
 
@@ -85,4 +82,8 @@ public class SpaProxyMiddleware
 </html>";
         }
     }
+
+    private static bool IsNavigationRequest(HttpRequest request) =>
+        (HttpMethods.IsGet(request.Method) || HttpMethods.IsHead(request.Method)) &&
+        request.Headers.Accept.Any(value => value != null && value.Contains("text/html", StringComparison.OrdinalIgnoreCase));
 }

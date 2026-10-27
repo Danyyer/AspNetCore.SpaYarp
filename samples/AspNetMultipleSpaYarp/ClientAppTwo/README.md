@@ -1,27 +1,17 @@
-# AspNetAngularSpaYarp
+# ClientAppTwo
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 12.0.2.
+Angular application served by the Vite based Angular dev server (`@angular/build:dev-server`, esbuild).
+It is used by an ASP.NET Core host with [AspNetCore.SpaYarp](../../../Readme.md), which starts it with `npm start`
+(or reuses it if it already runs) and forwards the requests that the host can't handle to it.
 
-## Development server
+Requires Node.js `^22.22.3`, `^24.15.0` or newer (see `engines` in `package.json`).
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The app will automatically reload if you change any of the source files.
+> `package.json` has an `overrides` entry that pins `vite` to a patched patch release (`@angular/build` pins an
+> older one with known advisories). Remove it once `@angular/build` ships a Vite version that includes the fixes.
 
-## Code scaffolding
-
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
-
-## Build
-
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory.
-
-## Running unit tests
-
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
-
-## Running end-to-end tests
-
-Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To use this command, you need to first add a package that implements end-to-end testing capabilities.
-
-## Further help
-
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI README](https://github.com/angular/angular-cli/blob/master/README.md).
+```
+npm install
+npm start      # ng serve on https://localhost:44479/two/ (uses the ASP.NET Core dev certificate)
+npm test       # unit tests (Vitest)
+npm run build  # production build into dist/
+```
